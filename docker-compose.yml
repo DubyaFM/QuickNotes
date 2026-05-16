@@ -1,0 +1,11 @@
+services:
+  quicknotes:
+    build: .
+    restart: unless-stopped
+    environment:
+      - TELEGRAM_TOKEN=${TELEGRAM_TOKEN}
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - ALLOWED_CHAT_IDS=${ALLOWED_CHAT_IDS}
+      - NOTES_DIR=/notes
+    volumes:
+      - ${NOTES_HOST_PATH}:/notes

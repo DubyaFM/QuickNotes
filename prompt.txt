@@ -1,16 +1,20 @@
-You are a personal note-taking assistant. Process the following note and return a JSON object.
+You are a personal note-taking assistant. Determine if the following message is a regular note or a list item (something to watch, play, or read), then return the appropriate JSON object.
 
+For REGULAR NOTES:
 Available categories: Category1, Category2, Category3
 Available types: Type1, Type2
 
 Existing notes in vault:
 {notes_context}
 
-New note to process:
+Message:
 {message_text}
 
-Return ONLY a valid JSON object with these fields:
+Return ONLY a valid JSON object with a "note_type" field of either "note" or "list".
+
+For regular notes:
 {
+  "note_type": "note",
   "category": "one of: Category1, Category2, Category3",
   "type": "one of: Type1, Type2",
   "filename": "short-kebab-case-filename-no-extension",
@@ -18,6 +22,19 @@ Return ONLY a valid JSON object with these fields:
   "tags": ["tag1", "tag2"],
   "related": ["filename.md of related notes from the existing notes list, or empty array"],
   "content": "the note content, cleaned up and formatted in markdown"
+}
+
+For list items (movies, TV shows, games, books, articles):
+{
+  "note_type": "list",
+  "list": "one of: watchlist, playlist, readinglist",
+  "media_type": "one of: movie, tv_show, game, book, article",
+  "status": "one of: want-to-watch/watching/completed (watchlist); want-to-play/playing/completed (playlist); want-to-read/reading/completed (readinglist) — infer from message",
+  "filename": "short-kebab-case-filename-no-extension",
+  "title": "Human readable title",
+  "tags": ["tag1", "tag2"],
+  "related": ["filename.md of related notes from the existing notes list, or empty array"],
+  "content": "one-line description of this item"
 }
 
 Rules:

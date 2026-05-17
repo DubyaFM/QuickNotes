@@ -9,6 +9,7 @@ from datetime import datetime
 from pathlib import Path
 from dotenv import load_dotenv
 import google.generativeai as genai
+from google.generativeai import protos
 
 # Load environment
 load_dotenv(Path(__file__).parent / '.env')
@@ -20,6 +21,11 @@ ALLOWED_CHAT_IDS = set(
     int(x.strip()) for x in os.getenv('ALLOWED_CHAT_IDS', '').split(',') if x.strip()
 )
 INBOX_DIR = NOTES_DIR / 'Inbox'
+LIST_DIRS = {
+    'watchlist':   NOTES_DIR / 'Watchlist',
+    'playlist':    NOTES_DIR / 'Playlist',
+    'readinglist': NOTES_DIR / 'Readinglist',
+}
 POLL_INTERVAL = 5  # seconds
 
 # Initialize Gemini
@@ -28,6 +34,7 @@ model = genai.GenerativeModel('gemini-2.5-flash')
 
 TELEGRAM_API = f'https://api.telegram.org/bot{TELEGRAM_TOKEN}'
 PROMPT_TEMPLATE = (Path(__file__).parent / 'prompt.txt').read_text()
+LIST_LOOKUP_TEMPLATE = (Path(__file__).parent / 'list_lookup_prompt.txt').read_text()
 
 
 def get_existing_notes():
@@ -48,25 +55,83 @@ def get_existing_notes():
     return notes
 
 
+def _parse_json_response(raw):
+    if not raw:
+        raise ValueError('Gemini returned an empty response (possibly blocked by safety filters)')
+    raw = raw.strip()
+    raw = re.sub(r'^```(?:json)?\n?', '', raw)
+    raw = re.sub(r'\n?```$', '', raw)
+    return json.loads(raw)
+
+
 def process_with_gemini(message_text, existing_notes):
     """Send message to Gemini for processing."""
     notes_context = '\n'.join(existing_notes) if existing_notes else 'No existing notes yet.'
     prompt = PROMPT_TEMPLATE.replace('{notes_context}', notes_context).replace('{message_text}', message_text)
-    response = model.generate_content(prompt)
-    raw = response.text
-    if not raw:
-        raise ValueError('Gemini returned an empty response (possibly blocked by safety filters)')
-    raw = raw.strip()
+    processed = _parse_json_response(model.generate_content(prompt).text)
 
-    # Strip markdown code fences if present
-    raw = re.sub(r'^```(?:json)?\n?', '', raw)
-    raw = re.sub(r'\n?```$', '', raw)
+    if processed.get('note_type') == 'list':
+        lookup_prompt = (LIST_LOOKUP_TEMPLATE
+                         .replace('{title}', processed.get('title', ''))
+                         .replace('{media_type}', processed.get('media_type', '')))
+        search_tool = protos.Tool(google_search_retrieval=protos.GoogleSearchRetrieval())
+        lookup_response = model.generate_content(lookup_prompt, tools=[search_tool])
+        try:
+            metadata = _parse_json_response(lookup_response.text)
+            processed.update({k: v for k, v in metadata.items() if v is not None})
+        except Exception as e:
+            print(f'Metadata lookup failed (continuing without it): {e}')
 
-    return json.loads(raw)
+    return processed
+
+
+def write_list_item(processed, raw_message):
+    """Write a list item (watchlist/playlist/readinglist) to its folder."""
+    list_type = processed.get('list', 'watchlist')
+    folder = LIST_DIRS.get(list_type, NOTES_DIR / 'Watchlist')
+    folder.mkdir(parents=True, exist_ok=True)
+
+    date_str = datetime.now().strftime('%Y-%m-%d')
+    filename = f"{processed['filename']}.md"
+    filepath = folder / filename
+
+    counter = 1
+    while filepath.exists():
+        filepath = folder / f"{processed['filename']}-{counter}.md"
+        counter += 1
+
+    safe_title = processed['title'].replace('"', '\\"')
+    lines = [
+        '---',
+        f'title: "{safe_title}"',
+        f'date: {date_str}',
+        f'list: {list_type}',
+        f'media_type: {processed.get("media_type", "")}',
+    ]
+    for field in ('creator', 'genre', 'platform'):
+        val = processed.get(field)
+        if val is not None:
+            lines.append(f'{field}: "{str(val).replace(chr(34), chr(92)+chr(34))}"')
+    if processed.get('year') is not None:
+        lines.append(f'year: {processed["year"]}')
+    lines.append(f'status: {processed.get("status", "want-to-watch")}')
+
+    tags_yaml = ', '.join(f'"{t}"' for t in processed.get('tags', []))
+    lines.append(f'tags: [{tags_yaml}]')
+    related_yaml = '\n'.join(f'  - "{r}"' for r in processed.get('related', []))
+    lines.append(f'related:\n{related_yaml}' if related_yaml else 'related: []')
+    lines.append('---\n')
+
+    content = '\n'.join(lines) + '\n' + processed.get('content', raw_message)
+    filepath.write_text(content)
+    return filepath, list_type
 
 
 def write_note(processed, raw_message):
     """Write the processed note to the vault."""
+    if processed.get('note_type') == 'list':
+        return write_list_item(processed, raw_message)
+
     category = processed.get('category', 'General')
 
     INBOX_DIR.mkdir(parents=True, exist_ok=True)
@@ -163,17 +228,34 @@ def main():
             try:
                 existing_notes = get_existing_notes()
                 processed = process_with_gemini(text, existing_notes)
-                filepath, category = write_note(processed, text)
+                filepath, _ = write_note(processed, text)
 
-                response = (
-                    f"✅ {processed['title']}\n"
-                    f"📁 {category} · {processed.get('type', 'Idea')}\n"
-                    f"🏷 {', '.join(processed.get('tags', []))}"
-                )
-                if processed.get('related'):
-                    response += f"\n🔗 Related: {', '.join(processed['related'])}"
+                if processed.get('note_type') == 'list':
+                    list_type = processed.get('list', 'watchlist')
+                    list_emoji = {'watchlist': '👁', 'playlist': '🎮', 'readinglist': '📚'}.get(list_type, '📋')
+                    meta_parts = [p for p in [
+                        processed.get('creator'),
+                        str(processed['year']) if processed.get('year') else None,
+                        processed.get('genre'),
+                        processed.get('platform'),
+                    ] if p]
+                    reply = (
+                        f"✅ {processed['title']}\n"
+                        f"{list_emoji} {list_type.title()} · {processed.get('status', '')}"
+                    )
+                    if meta_parts:
+                        reply += f"\n🎬 {' · '.join(meta_parts)}"
+                    reply += f"\n🏷 {', '.join(processed.get('tags', []))}"
+                else:
+                    reply = (
+                        f"✅ {processed['title']}\n"
+                        f"📁 {processed.get('category', 'General')} · {processed.get('type', 'Idea')}\n"
+                        f"🏷 {', '.join(processed.get('tags', []))}"
+                    )
+                    if processed.get('related'):
+                        reply += f"\n🔗 Related: {', '.join(processed['related'])}"
 
-                telegram_send_message(chat_id, response)
+                telegram_send_message(chat_id, reply)
                 print(f'Note written: {filepath}')
 
             except Exception as e:

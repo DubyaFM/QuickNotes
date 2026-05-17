@@ -1,0 +1,9 @@
+Search for "{title}" ({media_type}) and return ONLY a valid JSON object with these fields:
+{
+  "creator": "director, developer, or author — null if unknown",
+  "year": release or publication year as an integer — null if unknown,
+  "genre": "primary genre — null if unknown",
+  "platform": "where to stream and/or purchase, e.g. 'Netflix, Max / buy on Amazon' — null if unavailable"
+}
+
+For platform, include all major streaming services where it is currently available, followed by purchase options if it is not freely streamable. Use null if you cannot confirm any availability.

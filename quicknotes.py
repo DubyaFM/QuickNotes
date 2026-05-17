@@ -11,7 +11,11 @@ from dotenv import load_dotenv
 import google.generativeai as genai
 from google.generativeai import protos
 
-# Load environment
+# Bootstrap config dir from real OS environment before any dotenv loading
+CONFIG_DIR = Path(os.environ.get('CONFIG_DIR', Path(__file__).parent / 'config'))
+
+# Load secrets — config dir takes priority, project root is local dev fallback
+load_dotenv(CONFIG_DIR / '.env')
 load_dotenv(Path(__file__).parent / '.env')
 
 TELEGRAM_TOKEN = os.getenv('TELEGRAM_TOKEN')
@@ -20,21 +24,30 @@ NOTES_DIR = Path(os.getenv('NOTES_DIR', '/notes'))
 ALLOWED_CHAT_IDS = set(
     int(x.strip()) for x in os.getenv('ALLOWED_CHAT_IDS', '').split(',') if x.strip()
 )
+
+# Load settings.json
+_settings_path = CONFIG_DIR / 'settings.json'
+_settings = json.loads(_settings_path.read_text()) if _settings_path.exists() else {}
+
+GEMINI_MODEL = _settings.get('model', 'gemini-2.5-flash')
 INBOX_DIR = NOTES_DIR / 'Inbox'
 LIST_DIRS = {
-    'watchlist':   NOTES_DIR / 'Watchlist',
-    'playlist':    NOTES_DIR / 'Playlist',
-    'readinglist': NOTES_DIR / 'Readinglist',
+    k: NOTES_DIR / v
+    for k, v in _settings.get('list_dirs', {
+        'watchlist': 'Watchlist',
+        'playlist': 'Playlist',
+        'readinglist': 'Readinglist',
+    }).items()
 }
-POLL_INTERVAL = 5  # seconds
+POLL_INTERVAL = 5
 
 # Initialize Gemini
 genai.configure(api_key=GEMINI_API_KEY)
-model = genai.GenerativeModel('gemini-2.5-flash')
+model = genai.GenerativeModel(GEMINI_MODEL)
 
 TELEGRAM_API = f'https://api.telegram.org/bot{TELEGRAM_TOKEN}'
-PROMPT_TEMPLATE = (Path(__file__).parent / 'prompt.txt').read_text()
-LIST_LOOKUP_TEMPLATE = (Path(__file__).parent / 'list_lookup_prompt.txt').read_text()
+PROMPT_TEMPLATE = (CONFIG_DIR / 'prompt.txt').read_text()
+LIST_LOOKUP_TEMPLATE = (CONFIG_DIR / 'list_lookup_prompt.txt').read_text()
 
 
 def get_existing_notes():

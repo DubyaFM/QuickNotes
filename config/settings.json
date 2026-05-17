@@ -1,0 +1,8 @@
+{
+  "model": "gemini-2.5-flash",
+  "list_dirs": {
+    "watchlist": "Watchlist",
+    "playlist": "Playlist",
+    "readinglist": "Readinglist"
+  }
+}

@@ -7,5 +7,7 @@ services:
       - GEMINI_API_KEY=${GEMINI_API_KEY}
       - ALLOWED_CHAT_IDS=${ALLOWED_CHAT_IDS}
       - NOTES_DIR=/notes
+      - CONFIG_DIR=/config
     volumes:
       - ${NOTES_HOST_PATH}:/notes
+      - ${CONFIG_HOST_PATH:-/opt/quicknotes/config}:/config

@@ -1,5 +1,6 @@
 services:
   quicknotes:
+    container_name: quicknotes
     image: ghcr.io/dubyafm/quicknotes:latest
     restart: unless-stopped
     environment:

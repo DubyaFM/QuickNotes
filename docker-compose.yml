@@ -1,6 +1,6 @@
 services:
   quicknotes:
-    build: .
+    image: ghcr.io/dubyafm/quicknotes:latest
     restart: unless-stopped
     environment:
       - TELEGRAM_TOKEN=${TELEGRAM_TOKEN}

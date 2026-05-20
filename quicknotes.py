@@ -5,11 +5,12 @@ import time
 import json
 import requests
 import re
+import concurrent.futures
 from datetime import datetime
 from pathlib import Path
 from dotenv import load_dotenv
-import google.generativeai as genai
-from google.generativeai import protos
+from google import genai
+from google.genai import types
 
 # Bootstrap config dir from real OS environment before any dotenv loading
 CONFIG_DIR = Path(os.environ.get('CONFIG_DIR', Path(__file__).parent / 'config'))
@@ -40,10 +41,10 @@ LIST_DIRS = {
     }).items()
 }
 POLL_INTERVAL = 5
+GEMINI_TIMEOUT = 90
 
 # Initialize Gemini
-genai.configure(api_key=GEMINI_API_KEY)
-model = genai.GenerativeModel(GEMINI_MODEL)
+gemini = genai.Client(api_key=GEMINI_API_KEY)
 
 TELEGRAM_API = f'https://api.telegram.org/bot{TELEGRAM_TOKEN}'
 PROMPT_TEMPLATE = (CONFIG_DIR / 'prompt.txt').read_text()
@@ -77,19 +78,30 @@ def _parse_json_response(raw):
     return json.loads(raw)
 
 
+def _gemini_call(fn):
+    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+        return executor.submit(fn).result(timeout=GEMINI_TIMEOUT)
+
+
 def process_with_gemini(message_text, existing_notes):
     """Send message to Gemini for processing."""
     notes_context = '\n'.join(existing_notes) if existing_notes else 'No existing notes yet.'
     prompt = PROMPT_TEMPLATE.replace('{notes_context}', notes_context).replace('{message_text}', message_text)
-    processed = _parse_json_response(model.generate_content(prompt).text)
+    processed = _parse_json_response(_gemini_call(
+        lambda: gemini.models.generate_content(model=GEMINI_MODEL, contents=prompt)
+    ).text)
 
     if processed.get('note_type') == 'list':
         lookup_prompt = (LIST_LOOKUP_TEMPLATE
                          .replace('{title}', processed.get('title', ''))
                          .replace('{media_type}', processed.get('media_type', '')))
-        search_tool = protos.Tool(google_search_retrieval=protos.GoogleSearchRetrieval())
-        lookup_response = model.generate_content(lookup_prompt, tools=[search_tool])
+        search_tool = types.Tool(google_search=types.GoogleSearch())
         try:
+            lookup_response = _gemini_call(lambda: gemini.models.generate_content(
+                model=GEMINI_MODEL,
+                contents=lookup_prompt,
+                config=types.GenerateContentConfig(tools=[search_tool]),
+            ))
             metadata = _parse_json_response(lookup_response.text)
             processed.update({k: v for k, v in metadata.items() if v is not None})
         except Exception as e:
@@ -207,11 +219,37 @@ def telegram_send_message(chat_id, text):
         print(f'Error sending message: {e}')
 
 
+def handle_status_command(chat_id, start_time):
+    uptime = datetime.now() - start_time
+    total_seconds = int(uptime.total_seconds())
+    hours, remainder = divmod(total_seconds, 3600)
+    minutes = remainder // 60
+    uptime_str = f'{hours}h {minutes}m' if hours else f'{minutes}m'
+
+    note_count = sum(1 for _ in NOTES_DIR.rglob('*.md'))
+
+    try:
+        gemini.models.get(model=GEMINI_MODEL)
+        gemini_status = f'✅ connected ({GEMINI_MODEL})'
+    except Exception as e:
+        gemini_status = f'❌ {str(e)[:60]}'
+
+    reply = (
+        f'✅ Bot is running\n'
+        f'⏱ Uptime: {uptime_str}\n'
+        f'📝 Notes in vault: {note_count}\n'
+        f'🤖 Gemini: {gemini_status}\n'
+        f'📁 Vault: {NOTES_DIR}'
+    )
+    telegram_send_message(chat_id, reply)
+
+
 def main():
     print('QuickNotes bot starting...')
     if not ALLOWED_CHAT_IDS:
         print('WARNING: ALLOWED_CHAT_IDS not set — bot will respond to any user')
     offset = None
+    start_time = datetime.now()
 
     while True:
         updates = telegram_get_updates(offset)
@@ -231,7 +269,10 @@ def main():
             if ALLOWED_CHAT_IDS and chat_id not in ALLOWED_CHAT_IDS:
                 continue
 
-            # Skip commands for now
+            if text == '/status':
+                handle_status_command(chat_id, start_time)
+                continue
+
             if text.startswith('/'):
                 continue
 

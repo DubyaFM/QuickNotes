@@ -15,4 +15,4 @@ if [ "$TARGET_CONFIG" != "$DEFAULT_CONFIG" ]; then
     done
 fi
 
-exec python quicknotes.py
+exec python -u quicknotes.py

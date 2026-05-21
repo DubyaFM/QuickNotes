@@ -149,7 +149,31 @@ def write_list_item(processed, raw_message):
 
     content = '\n'.join(lines) + '\n' + processed.get('content', raw_message)
     filepath.write_text(content)
+    ensure_list_index(folder)
     return filepath, list_type
+
+
+def ensure_list_index(folder):
+    index_path = folder / f"{folder.name}.md"
+    if index_path.exists():
+        return
+    content = (
+        f"# {folder.name}\n\n"
+        "%%\n"
+        "base:\n"
+        f"  filter:\n"
+        f"    folder: {folder.name}\n"
+        "  columns:\n"
+        "    - field: title\n"
+        "    - field: creator\n"
+        "    - field: year\n"
+        "    - field: genre\n"
+        "    - field: platform\n"
+        "    - field: status\n"
+        "    - field: media_type\n"
+        "%%\n"
+    )
+    index_path.write_text(content)
 
 
 def write_note(processed, raw_message):

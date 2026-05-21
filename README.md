@@ -33,6 +33,8 @@ services:
       - ALLOWED_CHAT_IDS=${ALLOWED_CHAT_IDS}
       - NOTES_DIR=/notes
       - CONFIG_DIR=/config
+      - PUID=${PUID:-1000}
+      - PGID=${PGID:-1000}
     volumes:
       - ${NOTES_HOST_PATH}:/notes
       - ${CONFIG_HOST_PATH:-/opt/quicknotes/config}:/config
@@ -57,6 +59,8 @@ CONFIG_HOST_PATH=/opt/quicknotes/config
 | `ALLOWED_CHAT_IDS` | No | Comma-separated Telegram chat IDs; if unset, all users are accepted |
 | `NOTES_HOST_PATH` | Yes | Host path to your Obsidian vault |
 | `CONFIG_HOST_PATH` | No | Host path for config files (defaults to `/opt/quicknotes/config`) |
+| `PUID` | No | User ID to run as (default `1000`) — set to match your host user |
+| `PGID` | No | Group ID to run as (default `1000`) — set to match your host group |
 
 ### 3. Start the bot
 
@@ -81,6 +85,16 @@ Edit `settings.json` to change the model:
 ```json
 {
   "model": "gemini-2.5-flash"
+}
+```
+
+### Smart note linking
+
+When enabled (the default), the bot scans your vault before each note, passes all existing note titles to Gemini as context, and writes related-note links to the frontmatter. Disable it to skip the vault scan and omit related links — useful for large vaults or if you prefer not to send your note titles to the API.
+
+```json
+{
+  "smart_linking": false
 }
 ```
 

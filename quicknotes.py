@@ -31,6 +31,7 @@ _settings_path = CONFIG_DIR / 'settings.json'
 _settings = json.loads(_settings_path.read_text()) if _settings_path.exists() else {}
 
 GEMINI_MODEL = _settings.get('model', 'gemini-2.5-flash')
+SMART_LINKING = _settings.get('smart_linking', True)
 INBOX_DIR = NOTES_DIR / 'Inbox'
 LIST_DIRS = {
     k: NOTES_DIR / v
@@ -83,6 +84,14 @@ def _gemini_call(fn):
         return executor.submit(fn).result(timeout=GEMINI_TIMEOUT)
 
 
+def _sanitize_filename(raw):
+    """Strip path traversal characters from a Gemini-supplied filename."""
+    name = re.sub(r'[/\\]', '', raw)
+    name = re.sub(r'\.\.+', '', name)
+    name = name.strip('. ')
+    return name or 'untitled'
+
+
 def process_with_gemini(message_text, existing_notes):
     """Send message to Gemini for processing."""
     notes_context = '\n'.join(existing_notes) if existing_notes else 'No existing notes yet.'
@@ -117,12 +126,13 @@ def write_list_item(processed, raw_message):
     folder.mkdir(parents=True, exist_ok=True)
 
     date_str = datetime.now().strftime('%Y-%m-%d')
-    filename = f"{processed['filename']}.md"
+    safe_name = _sanitize_filename(processed['filename'])
+    filename = f"{safe_name}.md"
     filepath = folder / filename
 
     counter = 1
     while filepath.exists():
-        filepath = folder / f"{processed['filename']}-{counter}.md"
+        filepath = folder / f"{safe_name}-{counter}.md"
         counter += 1
 
     safe_title = processed['title'].replace('"', '\\"')
@@ -186,13 +196,14 @@ def write_note(processed, raw_message):
     INBOX_DIR.mkdir(parents=True, exist_ok=True)
 
     date_str = datetime.now().strftime('%Y-%m-%d')
-    filename = f"{processed['filename']}.md"
+    safe_name = _sanitize_filename(processed['filename'])
+    filename = f"{safe_name}.md"
     filepath = INBOX_DIR / filename
 
     # Handle duplicate filenames
     counter = 1
     while filepath.exists():
-        filepath = INBOX_DIR / f"{processed['filename']}-{counter}.md"
+        filepath = INBOX_DIR / f"{safe_name}-{counter}.md"
         counter += 1
 
     tags_yaml = ', '.join(f'"{t}"' for t in processed.get('tags', []))
@@ -275,6 +286,13 @@ def main():
     offset = None
     start_time = datetime.now()
 
+    if SMART_LINKING:
+        print('Loading notes cache...')
+        notes_cache = get_existing_notes()
+        print(f'Cached {len(notes_cache)} notes.')
+    else:
+        notes_cache = []
+
     while True:
         updates = telegram_get_updates(offset)
         if not updates or not updates.get('ok'):
@@ -304,9 +322,13 @@ def main():
             telegram_send_message(chat_id, '⏳ Processing your note...')
 
             try:
-                existing_notes = get_existing_notes()
-                processed = process_with_gemini(text, existing_notes)
+                processed = process_with_gemini(text, notes_cache)
+                if not SMART_LINKING:
+                    processed['related'] = []
                 filepath, _ = write_note(processed, text)
+                if SMART_LINKING:
+                    safe_name = _sanitize_filename(processed['filename'])
+                    notes_cache.append(f"{safe_name}.md: {processed['title']}")
 
                 if processed.get('note_type') == 'list':
                     list_type = processed.get('list', 'watchlist')

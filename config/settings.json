@@ -1,5 +1,6 @@
 {
   "model": "gemini-2.5-flash",
+  "smart_linking": true,
   "list_dirs": {
     "watchlist": "Watchlist",
     "playlist": "Playlist",

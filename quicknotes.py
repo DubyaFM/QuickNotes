@@ -301,7 +301,10 @@ def main():
             if not text or not chat_id:
                 continue
 
+            print(f'Message from {chat_id}: {text[:60]!r}')
+
             if ALLOWED_CHAT_IDS and chat_id not in ALLOWED_CHAT_IDS:
+                print(f'Ignoring unauthorised chat_id {chat_id}')
                 continue
 
             if text == '/status':

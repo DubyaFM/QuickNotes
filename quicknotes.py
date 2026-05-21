@@ -56,8 +56,6 @@ def get_existing_notes():
     """Scan vault for processed note filenames and titles."""
     notes = []
     for f in NOTES_DIR.rglob('*.md'):
-        if f.is_relative_to(INBOX_DIR):
-            continue
         title = f.stem.replace('-', ' ').replace('_', ' ').title()
         try:
             content = f.read_text()
@@ -264,7 +262,7 @@ def handle_status_command(chat_id, start_time):
     note_count = sum(1 for _ in NOTES_DIR.rglob('*.md'))
 
     try:
-        gemini.models.get(model=GEMINI_MODEL)
+        _gemini_call(lambda: gemini.models.get(model=GEMINI_MODEL))
         gemini_status = f'✅ connected ({GEMINI_MODEL})'
     except Exception as e:
         gemini_status = f'❌ {str(e)[:60]}'

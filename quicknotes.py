@@ -253,6 +253,7 @@ def telegram_send_message(chat_id, text):
 
 
 def handle_status_command(chat_id, start_time):
+    print(f'Status requested by chat_id {chat_id}')
     uptime = datetime.now() - start_time
     total_seconds = int(uptime.total_seconds())
     hours, remainder = divmod(total_seconds, 3600)
@@ -261,17 +262,11 @@ def handle_status_command(chat_id, start_time):
 
     note_count = sum(1 for _ in NOTES_DIR.rglob('*.md'))
 
-    try:
-        _gemini_call(lambda: gemini.models.get(model=GEMINI_MODEL))
-        gemini_status = f'✅ connected ({GEMINI_MODEL})'
-    except Exception as e:
-        gemini_status = f'❌ {str(e)[:60]}'
-
     reply = (
         f'✅ Bot is running\n'
         f'⏱ Uptime: {uptime_str}\n'
         f'📝 Notes in vault: {note_count}\n'
-        f'🤖 Gemini: {gemini_status}\n'
+        f'🤖 Model: {GEMINI_MODEL}\n'
         f'📁 Vault: {NOTES_DIR}'
     )
     telegram_send_message(chat_id, reply)

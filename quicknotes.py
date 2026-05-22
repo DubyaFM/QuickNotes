@@ -252,6 +252,18 @@ def telegram_send_message(chat_id, text):
         print(f'Error sending message: {e}')
 
 
+def telegram_delete_webhook():
+    try:
+        r = requests.post(f'{TELEGRAM_API}/deleteWebhook')
+        data = r.json()
+        if data.get('ok'):
+            print('Webhook deleted successfully.')
+        else:
+            print(f'deleteWebhook failed: {data}')
+    except Exception as e:
+        print(f'Error deleting webhook: {e}')
+
+
 def handle_status_command(chat_id, start_time):
     print(f'Status requested by chat_id {chat_id}')
     uptime = datetime.now() - start_time
@@ -293,7 +305,11 @@ def main():
             time.sleep(POLL_INTERVAL)
             continue
         if not updates.get('ok'):
-            print(f'Poll error: {updates}')
+            if updates.get('error_code') == 409 and 'webhook' in updates.get('description', '').lower():
+                print('Webhook conflict detected — auto-deleting webhook.')
+                telegram_delete_webhook()
+            else:
+                print(f'Poll error: {updates}')
             time.sleep(POLL_INTERVAL)
             continue
 

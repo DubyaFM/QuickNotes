@@ -288,7 +288,12 @@ def main():
 
     while True:
         updates = telegram_get_updates(offset)
-        if not updates or not updates.get('ok'):
+        if not updates:
+            print('Poll returned None (network error or timeout)')
+            time.sleep(POLL_INTERVAL)
+            continue
+        if not updates.get('ok'):
+            print(f'Poll error: {updates}')
             time.sleep(POLL_INTERVAL)
             continue
 

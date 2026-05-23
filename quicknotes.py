@@ -14,6 +14,8 @@ from google.genai import types
 
 # Bootstrap config dir from real OS environment before any dotenv loading
 CONFIG_DIR = Path(os.environ.get('CONFIG_DIR', Path(__file__).parent / 'config'))
+# Developer-owned files (prompt templates) always read from the image path
+APP_DIR = Path(__file__).parent / 'config'
 
 # Load secrets — config dir takes priority, project root is local dev fallback
 load_dotenv(CONFIG_DIR / '.env')
@@ -48,8 +50,8 @@ GEMINI_TIMEOUT = 90
 gemini = genai.Client(api_key=GEMINI_API_KEY)
 
 TELEGRAM_API = f'https://api.telegram.org/bot{TELEGRAM_TOKEN}'
-PROMPT_TEMPLATE = (CONFIG_DIR / 'prompt.txt').read_text()
-LIST_LOOKUP_TEMPLATE = (CONFIG_DIR / 'list_lookup_prompt.txt').read_text()
+PROMPT_TEMPLATE = (APP_DIR / 'prompt.txt').read_text()
+LIST_LOOKUP_TEMPLATE = (APP_DIR / 'list_lookup_prompt.txt').read_text()
 
 
 def get_existing_notes():
@@ -93,7 +95,15 @@ def _sanitize_filename(raw):
 def process_with_gemini(message_text, existing_notes):
     """Send message to Gemini for processing."""
     notes_context = '\n'.join(existing_notes) if existing_notes else 'No existing notes yet.'
-    prompt = PROMPT_TEMPLATE.replace('{notes_context}', notes_context).replace('{message_text}', message_text)
+    categories = ', '.join(_settings.get('categories', ['General']))
+    types = ', '.join(_settings.get('types', ['Idea']))
+    additional = _settings.get('additional_instructions', '').strip()
+    prompt = (PROMPT_TEMPLATE
+              .replace('{categories}', categories)
+              .replace('{types}', types)
+              .replace('{additional_instructions}', additional)
+              .replace('{notes_context}', notes_context)
+              .replace('{message_text}', message_text))
     processed = _parse_json_response(_gemini_call(
         lambda: gemini.models.generate_content(model=GEMINI_MODEL, contents=prompt)
     ).text)

@@ -1,5 +1,6 @@
 Search for "{title}" ({media_type}) and return ONLY a valid JSON object with these fields:
 {
+  "title": "canonical title of the matching {media_type} as found via search — null if results are ambiguous or no clear match",
   "creator": "director, developer, or author — null if unknown",
   "year": release or publication year as an integer — null if unknown,
   "genre": "primary genre — null if unknown",

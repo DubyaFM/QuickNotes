@@ -68,19 +68,36 @@ CONFIG_HOST_PATH=/opt/quicknotes/config
 docker compose up -d
 ```
 
-On first launch, the entrypoint script copies default config files (`prompt.txt`, `list_lookup_prompt.txt`, `settings.json`) into the config volume so you can edit them without rebuilding the image.
+On first launch, the entrypoint copies a default `settings.json` into the config volume. Prompt templates are baked into the image and updated automatically when you pull a new image — they are not written to the config volume.
 
 ---
 
 ## Customization
 
+All customization lives in `settings.json` in your config volume. The prompt templates are developer-owned and updated automatically with each image pull — you do not edit them directly.
+
 ### Categories and note types
 
-Edit `prompt.txt` in your config directory to define your own categories and note types. The prompt uses two placeholders — `{notes_context}` and `{message_text}` — which are the only parts with special syntax. Everything else is plain text you can rewrite freely.
+Set the categories and types Gemini will use when classifying notes:
+
+```json
+{
+  "categories": ["DnD", "HomeLab", "General"],
+  "types": ["Session Notes", "Idea", "Reference"]
+}
+```
+
+### Additional instructions
+
+Inject extra rules into the prompt without touching the template:
+
+```json
+{
+  "additional_instructions": "prefer DnD category for anything fantasy or tabletop related"
+}
+```
 
 ### Gemini model
-
-Edit `settings.json` to change the model:
 
 ```json
 {
@@ -108,6 +125,23 @@ The watchlist, playlist, and readinglist folders default to `Watchlist/`, `Playl
     "watchlist": "My Watch List",
     "playlist": "Music",
     "readinglist": "Books"
+  }
+}
+```
+
+### Full `settings.json` reference
+
+```json
+{
+  "model": "gemini-2.5-flash",
+  "smart_linking": true,
+  "categories": ["General"],
+  "types": ["Idea"],
+  "additional_instructions": "",
+  "list_dirs": {
+    "watchlist": "Watchlist",
+    "playlist": "Playlist",
+    "readinglist": "Readinglist"
   }
 }
 ```

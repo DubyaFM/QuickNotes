@@ -1,6 +1,9 @@
 {
   "model": "gemini-2.5-flash",
   "smart_linking": true,
+  "categories": ["General"],
+  "types": ["Idea"],
+  "additional_instructions": "",
   "list_dirs": {
     "watchlist": "Watchlist",
     "playlist": "Playlist",

@@ -9,11 +9,10 @@ TARGET_CONFIG="${CONFIG_DIR:-/app/config}"
 
 if [ "$TARGET_CONFIG" != "$DEFAULT_CONFIG" ]; then
     mkdir -p "$TARGET_CONFIG"
-    for f in "$DEFAULT_CONFIG"/*; do
-        filename=$(basename "$f")
+    for filename in settings.json; do
         if [ ! -f "$TARGET_CONFIG/$filename" ]; then
             echo "Populating default config: $filename"
-            cp "$f" "$TARGET_CONFIG/$filename"
+            cp "$DEFAULT_CONFIG/$filename" "$TARGET_CONFIG/$filename"
         fi
     done
 fi
